@@ -1,0 +1,52 @@
+parameters:
+  - name: 'platform'
+    type: string
+
+steps:
+  - script: |
+      conda config --set always_yes yes --set changeps1 no
+      conda update -q conda
+      conda env create --file environment-host.yml
+    displayName: Install dependencies
+
+  - script: |
+      conda env create --file environment-build.yml
+    displayName: Install conda-forge compilers
+
+  - script: |
+      source activate xeus-cling
+      export PREFIX=$CONDA_PREFIX
+      source deactivate
+      source activate build-xeus-cling
+      mkdir build
+      cd build
+      cmake -DCMAKE_PREFIX_PATH=$PREFIX -DCMAKE_INSTALL_PREFIX=$PREFIX -DXEUS_CLING_BUILD_TESTS=ON -DCMAKE_INSTALL_LIBDIR=lib $(Build.SourcesDirectory)
+    displayName: Configure xeus-cling
+    workingDirectory: $(Build.BinariesDirectory)
+
+  - script: |
+      source activate build-xeus-cling 
+      make install -j2
+    displayName: Build xeus-cling
+    workingDirectory: $(Build.BinariesDirectory)/build
+
+  - script: |
+      source activate xeus-cling
+      ./test_xeus_cling
+    displayName: Test xeus-cling (C++)
+    workingDirectory: $(Build.BinariesDirectory)/build/test
+
+  - script: |
+      source activate xeus-cling
+      py.test . -v;
+    condition: eq('${{ parameters.platform }}', 'Linux')
+    displayName: Test xeus-cling (Python)
+    workingDirectory: $(Build.sourcesDirectory)/test
+
+  - script: |
+      source activate xeus-cling
+      conda remove libcxx --force  # Workaround for https://github.com/conda-forge/clangdev-feedstock/issues/188 impacting conda package for clangdev 5
+      py.test . -v;
+    condition: eq('${{ parameters.platform }}', 'OSX')
+    displayName: Test xeus-cling (Python)
+    workingDirectory: $(Build.sourcesDirectory)/test

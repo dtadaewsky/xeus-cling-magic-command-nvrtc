@@ -1,0 +1,29 @@
+#ifndef XMAGICS_NVRTC_HPP
+#define XMAGICS_NVRTC_HPP
+
+
+#include "cling/Interpreter/Interpreter.h"
+#include "xeus-cling/xmagics.hpp"
+#include "xeus-cling/xoptions.hpp"
+#include "xeus-cling/xinterpreter.hpp"
+
+#include <string>
+
+namespace xcpp
+{
+    class nvrtc: public xmagic_cell
+    {
+    public:
+
+        nvrtc(cling::Interpreter& i) : m_interpreter(i){}
+        virtual void operator()(const std::string& line, const std::string& cell) override;
+    private:
+
+        cling::Interpreter& m_interpreter;
+        //xcpp::interpreter& x_interpreter;
+
+    };
+}  
+
+
+#endif
