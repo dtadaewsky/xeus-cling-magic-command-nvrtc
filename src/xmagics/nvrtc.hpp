@@ -2,6 +2,9 @@
 #define XMAGICS_NVRTC_HPP
 
 
+
+
+
 #include "cling/Interpreter/Interpreter.h"
 #include "xeus-cling/xmagics.hpp"
 #include "xeus-cling/xoptions.hpp"
@@ -17,11 +20,15 @@ namespace xcpp
 
         nvrtc(cling::Interpreter& i) : m_interpreter(i){}
         virtual void operator()(const std::string& line, const std::string& cell) override;
+        
     private:
+        void generateNVRTC(const std::string& line, const std::string& cell);
+        int loadLibrarys();
+        int loadIncludes();
 
         cling::Interpreter& m_interpreter;
         //xcpp::interpreter& x_interpreter;
-
+        
     };
 }  
 
