@@ -25,8 +25,12 @@ namespace xcpp
         void generateNVRTC(const std::string& line, const std::string& cell);
         int loadLibrarys();
         int loadIncludes();
+        int defineCUDACheckError();
+        int declareNVRTCVar();
+        int definePTX(const std::string& code);
 
         cling::Interpreter& m_interpreter;
+        bool initializationDone=false;
         //xcpp::interpreter& x_interpreter;
         
     };
