@@ -28,6 +28,7 @@ namespace xcpp
         int defineCUDACheckError();
         int declareNVRTCVar();
         int definePTX(const std::string& code);
+        int initDevice(bool getDeviceInfo);
 
         cling::Interpreter& m_interpreter;
         bool initializationDone=false;
