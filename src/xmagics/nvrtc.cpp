@@ -144,19 +144,23 @@ namespace xcpp
         std::string clingInput;
         std::string generateProgVarName = "prog"; 
         
-        generateProgVarName += "index"; //TODO  Sollte immer einen neuen namen haben, vielleicht auch mit index aus einer Variable
+        generateProgVarName += std::to_string(index); //TODO  Sollte immer einen neuen namen haben, vielleicht auch mit index aus einer Variable
         
-        std::string declareInput = "nvrtcProgram " +generateProgVarName + ";";
-        
+        std::string declareInput = "nvrtcProgram " +generateProgVarName + ";"; 
         m_interpreter.declare(declareInput);
-        m_interpreter.declare("size_t ptxSize;");
+        std::string declarePTXSizeInput = "size_t ptxSize" + std::to_string(index); 
+        declarePTXSizeInput += ";";//TODO  Sollte immer einen neuen namen haben, vielleicht auch mit index aus einer Variable
+        m_interpreter.declare(declarePTXSizeInput);
 
 
-        clingInput= "const char *kernelCodeInCharArrey =R\"RawMarker(" + code + ")RawMarker\";"; //TODO kernelCodeInCharArrey variable to garantie for more then one time useable 
+        clingInput= "const char *kernelCodeInCharArrey"+ std::to_string(index);
+        clingInput += "=R\"RawMarker(" + code + ")RawMarker\";";
         m_interpreter.process(clingInput, &output);
 
 
-        clingInput = "checkCudaError(nvrtcCreateProgram(&" + generateProgVarName + ", kernelCodeInCharArrey,\"xeus_cling.cu\",0,nullptr,nullptr));";
+        clingInput = "checkCudaError(nvrtcCreateProgram(&" + generateProgVarName; 
+        clingInput += ", kernelCodeInCharArrey"+ std::to_string(index);
+        clingInput += ",\"xeus_cling.cu\",0,nullptr,nullptr));";
         m_interpreter.process(clingInput, &output);
         
 
@@ -178,21 +182,38 @@ namespace xcpp
         )RawMarker";
         m_interpreter.process(clingInput, &output);
 
-        clingInput = "checkCudaError(nvrtcGetPTXSize(" + generateProgVarName + ",&ptxSize));";
+        clingInput = "checkCudaError(nvrtcGetPTXSize(" + generateProgVarName + ",&ptxSize" + std::to_string(index) + "));";
         m_interpreter.process(clingInput, &output);
         
-        m_interpreter.declare("char* ptx = new char[ptxSize];");
+        m_interpreter.declare("char* ptx" + std::to_string(index) + " = new char[ptxSize" + std::to_string(index) + "];");
 
-        clingInput = "checkCudaError(nvrtcGetPTX(" + generateProgVarName + ",ptx));";
+        clingInput = "checkCudaError(nvrtcGetPTX(" + generateProgVarName + ",ptx" + std::to_string(index) + "));";
         m_interpreter.process(clingInput, &output);
 
         //TEST
-        clingInput = "std::string ptxString(ptx, ptxSize);";
+        clingInput = "std::string ptxString(ptx" + std::to_string(index) + ", ptxSize"+ std::to_string(index) + ");";
         m_interpreter.process(clingInput, &output);
         nl::json pub_data = mime_repr(output);
-        std::string str = pub_data["text/plain"].get<std::string>();
-        
-        std::cout << str;
+
+        std::list<std::string> listOfNames = extractFunctionNames(pub_data["text/plain"].get<std::string>());
+ 
+
+
+        clingInput = "cuModuleLoadData(&cuModule, ptx" + std::to_string(index) + ");";
+        m_interpreter.process(clingInput, &output);
+
+        for (std::string s: listOfNames)
+        {
+            clingInput = "CUfunction "+ s +";"; //TODO Regestriere wenn neu, wenn nicht neu dann ignorieren und fortfahren!!!
+            m_interpreter.declare(clingInput); 
+            clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ s + R"RawMarker(, cuModule, ")RawMarker"+ s +"\"));";
+            std::cout << clingInput << std::endl;
+            m_interpreter.process(clingInput, &output);
+            std::cout << s << std::endl;
+        } 
+
+        index++;
+
         return SUCCESS;
     } 
 
@@ -207,8 +228,8 @@ namespace xcpp
             std::cerr << "Could not init device " << std::endl;
             return ERROR_CODE;
         }
-
         
+
         clingInput= "int CUDAdeviceCount = 0;; checkCudaError(cuDeviceGetCount(&CUDAdeviceCount));"; 
         m_interpreter.process(clingInput, &output);
         if(getDeviceInfo)
@@ -257,9 +278,28 @@ namespace xcpp
             m_interpreter.process(clingInput, &output);
         }     
 
+        clingInput= "cuDeviceGet(&device, 0);"; 
+        m_interpreter.process(clingInput, &output);
+        m_interpreter.declare("CUcontext cuContext;");
+        clingInput = "checkCudaError(cuCtxCreate(&cuContext, 0, device));";
+        m_interpreter.process(clingInput, &output);
+        m_interpreter.declare("CUmodule cuModule;");
 
         return 0;
     } 
 
+    std::list<std::string> nvrtc::extractFunctionNames(const std::string& ptx)
+    {
+        std::list<std::string> listOfFunctions;
+        std::string singleFinding;
+        std::regex ptxFunctionName(R"(\/\/ .globl\s(\w*))");
+        auto words_begin =std::sregex_iterator(ptx.begin(),ptx.end(),ptxFunctionName);
+        auto words_end =std::sregex_iterator();
 
+        for(std::sregex_iterator i = words_begin; i != words_end; ++i){
+            std::smatch match = *i;
+            listOfFunctions.push_back(match[1].str());
+        }
+        return listOfFunctions;
+    }
 }

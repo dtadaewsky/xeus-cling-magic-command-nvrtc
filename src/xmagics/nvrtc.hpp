@@ -30,8 +30,11 @@ namespace xcpp
         int definePTX(const std::string& code);
         int initDevice(bool getDeviceInfo);
 
+        std::list<std::string> extractFunctionNames(const std::string& ptx);
+
         cling::Interpreter& m_interpreter;
         bool initializationDone=false;
+        int index=0;
         //xcpp::interpreter& x_interpreter;
         
     };
