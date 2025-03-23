@@ -60,7 +60,27 @@ namespace xcpp
             initializationDone=true;    
         }   
 
+
+        std::string clingInput;
+        cling::Value output;
+        for (int i = 0; i < foundCUDADevices; i++)
+        {
+            clingInput = 
+            R"RawMarker(
+                for (int i = 0; i < CUDAdeviceCount; i++) {
+
+                    cuDeviceGet(&deviceInfo, i);
+            
+                    char gpuName[256];
+                    cuDeviceGetName(gpuName, 256, deviceInfo);
+    
+                    std::cout << "GPU: " << gpuName << "    CUdevice VarName: device"<< i << std::endl;
+                } 
+            )RawMarker";
+            m_interpreter.process(clingInput, &output);
+        }
         
+
 
         definePTX(cell);
 
@@ -197,19 +217,62 @@ namespace xcpp
 
         std::list<std::string> listOfNames = extractFunctionNames(pub_data["text/plain"].get<std::string>());
  
-
-
-        clingInput = "cuModuleLoadData(&cuModule, ptx" + std::to_string(index) + ");";
-        m_interpreter.process(clingInput, &output);
+        for (int i = 0; i < foundCUDADevices; i++)
+        {
+            clingInput = "cuModuleLoadData(&cuModule" + std::to_string(i) + ", ptx" + std::to_string(index) + ");";
+            m_interpreter.process(clingInput, &output);
+        }
 
         for (std::string s: listOfNames)
-        {
-            clingInput = "CUfunction "+ s +";"; //TODO Regestriere wenn neu, wenn nicht neu dann ignorieren und fortfahren!!!
-            m_interpreter.declare(clingInput); 
-            clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ s + R"RawMarker(, cuModule, ")RawMarker"+ s +"\"));";
-            std::cout << clingInput << std::endl;
-            m_interpreter.process(clingInput, &output);
-            std::cout << s << std::endl;
+        { 
+            if (std::find(registeredFunctionNames.begin(), registeredFunctionNames.end(), s) == registeredFunctionNames.end())
+            {
+                for (int i = 0; i < foundCUDADevices; i++)
+                {
+                    if(foundCUDADevices==1)
+                    {
+                        clingInput = "CUfunction "+ s +";";
+                        m_interpreter.declare(clingInput);
+                        std::cout << s << std::endl;
+                    } 
+                    else
+                    {
+                        clingInput = "CUfunction "+ s +"_GPU"+ std::to_string(i) + ";";
+                        m_interpreter.declare(clingInput);
+                        std::cout << s << "_GPU" << std::to_string(i)<< std::endl;
+                    } 
+                } 
+                registeredFunctionNames.push_back(s);  
+            }
+            else
+            {
+                for (int i = 0; i < foundCUDADevices; i++)
+                {
+                    if(foundCUDADevices==1)
+                    {
+                        std::cout << s << std::endl;
+                    } 
+                    else
+                    {
+                        std::cout << s << "_GPU" << std::to_string(i)<< std::endl;
+                    } 
+                } 
+            }  
+
+
+            for (int i = 0; i < foundCUDADevices; i++)
+            {
+                if(foundCUDADevices==1)
+                {
+                    clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ s + R"RawMarker(, cuModule0, ")RawMarker"+ s +"\"));";
+                    m_interpreter.process(clingInput, &output);
+                }
+                else
+                {
+                    clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ s +"_GPU"+ std::to_string(i) + R"RawMarker(, cuModule)RawMarker" + std::to_string(i)+ R"RawMarker(, ")RawMarker"+ s + "\"));";
+                    m_interpreter.process(clingInput, &output);
+                } 
+            } 
         } 
 
         index++;
@@ -223,15 +286,30 @@ namespace xcpp
         std::string clingInput= "cuInit(0);"; 
         m_interpreter.process(clingInput, &output);
 
-        if(m_interpreter.declare("CUdevice device;")!=cling::Interpreter::CompilationResult::kSuccess)
+        clingInput= "CUdevice deviceInfo; int CUDAdeviceCount = 0; checkCudaError(cuDeviceGetCount(&CUDAdeviceCount));CUDAdeviceCount;"; 
+        m_interpreter.process(clingInput, &output);
+        foundCUDADevices= output.getLL();
+
+        ///foundCUDADevices=2; //TODO TEST!!!
+
+        for (int i = 0; i < foundCUDADevices; i++)
         {
-            std::cerr << "Could not init device " << std::endl;
-            return ERROR_CODE;
-        }
+            if(m_interpreter.declare("CUdevice device"+ std::to_string(i) +";")!=cling::Interpreter::CompilationResult::kSuccess)
+            {
+                std::cerr << "Could not init device: " << std::to_string(i) <<std::endl;
+                //  return ERROR_CODE;
+            }
+           // std::cout << "device: " << std::to_string(i) << std::endl;
+            clingInput= "checkCudaError(cuDeviceGet(&device"+ std::to_string(i) + ", " + std::to_string(i) + "));"; 
+            m_interpreter.process(clingInput, &output);
+            m_interpreter.declare("CUcontext cuContext"+std::to_string(i)+";");
+            clingInput = "checkCudaError(cuCtxCreate(&cuContext" + std::to_string(i) + ", 0, device" + std::to_string(i) + "));";
+            m_interpreter.process(clingInput, &output);
+            m_interpreter.declare("CUmodule cuModule"+ std::to_string(i) + ";");
+        } 
         
 
-        clingInput= "int CUDAdeviceCount = 0;; checkCudaError(cuDeviceGetCount(&CUDAdeviceCount));"; 
-        m_interpreter.process(clingInput, &output);
+        
         if(getDeviceInfo)
         {
             clingInput= "std::cout << \"Found CUDA capable devices: \"<< CUDAdeviceCount <<std::endl;"; 
@@ -240,17 +318,17 @@ namespace xcpp
 
             int maxVersion = 0, maxVersionIndex = 0;
             int minVersion = 999, minVersionIndex = 999;
-
+            
             for (int i = 0; i < CUDAdeviceCount; i++) {
 
-                cuDeviceGet(&device, i);
+                cuDeviceGet(&deviceInfo, i);
         
                 char gpuName[256];
-                cuDeviceGetName(gpuName, 256, device);
+                cuDeviceGetName(gpuName, 256, deviceInfo);
         
                 int version, versionIndex;
-                cuDeviceGetAttribute(&version, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, device);
-                cuDeviceGetAttribute(&versionIndex, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, device);
+                cuDeviceGetAttribute(&version, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, deviceInfo);
+                cuDeviceGetAttribute(&versionIndex, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, deviceInfo);
         
                 std::cout << "GPU Number:" << i << ": " << gpuName << std::endl;
                 std::cout << "Compute Capability: " << version << "." << versionIndex << std::endl;
@@ -278,12 +356,24 @@ namespace xcpp
             m_interpreter.process(clingInput, &output);
         }     
 
-        clingInput= "cuDeviceGet(&device, 0);"; 
-        m_interpreter.process(clingInput, &output);
-        m_interpreter.declare("CUcontext cuContext;");
-        clingInput = "checkCudaError(cuCtxCreate(&cuContext, 0, device));";
-        m_interpreter.process(clingInput, &output);
-        m_interpreter.declare("CUmodule cuModule;");
+        
+
+       // if(foundCUDADevices==1)
+      //  {
+       //     clingInput= "cuDeviceGet(&device0, 0);"; 
+       //     m_interpreter.process(clingInput, &output);
+       //     m_interpreter.declare("CUcontext cuContext0;");
+        //    clingInput = "checkCudaError(cuCtxCreate(&cuContext0, 0, device0));";
+       //     m_interpreter.process(clingInput, &output);
+       //     m_interpreter.declare("CUmodule cuModule0;");
+     //   } 
+       // else if(foundCUDADevices>1)
+        //{
+            
+       // } 
+
+
+
 
         return 0;
     } 

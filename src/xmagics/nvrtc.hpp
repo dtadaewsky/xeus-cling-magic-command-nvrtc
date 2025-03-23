@@ -32,9 +32,13 @@ namespace xcpp
 
         std::list<std::string> extractFunctionNames(const std::string& ptx);
 
+
+        std::list<std::string> registeredFunctionNames;
+
         cling::Interpreter& m_interpreter;
         bool initializationDone=false;
         int index=0;
+        int foundCUDADevices=0;
         //xcpp::interpreter& x_interpreter;
         
     };
