@@ -28,17 +28,20 @@ namespace xcpp
         int defineCUDACheckError();
         int declareNVRTCVar();
         int definePTX(const std::string& code);
-        int initDevice(bool getDeviceInfo);
-
+        int initDevice();
+        int getDeviceInfo();
+        int printDeviceName();
         std::list<std::string> extractFunctionNames(const std::string& ptx);
 
-
+        std::vector<std::string> compilerOptions;
         std::list<std::string> registeredFunctionNames;
 
         cling::Interpreter& m_interpreter;
         bool initializationDone=false;
         int index=0;
         int foundCUDADevices=0;
+        bool printDeviceInfo=false;
+
         //xcpp::interpreter& x_interpreter;
         
     };

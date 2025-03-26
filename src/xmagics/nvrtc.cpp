@@ -28,7 +28,7 @@
 #include <clang-c/Index.h>
 
 #include "../xmime_internal.hpp"
-
+#include <regex>
 
 
 #define ERROR_CODE -1
@@ -45,6 +45,30 @@ namespace xcpp
 
     void nvrtc::generateNVRTC(const std::string& line, const std::string& cell)
     {
+        std::regex GPUInfo(R"(-GPUInfo(\s|$))");
+        if (std::regex_search(line, GPUInfo)) {
+            printDeviceInfo=true;
+        } else {
+            printDeviceInfo=false;
+        }
+
+        std::regex pattern(R"(-co\s+((?:[^\s](?:[^\s]*))))"); // Sucht "-co" gefolgt von Wörtern ohne "-" davor
+        std::sregex_iterator it(line.begin(), line.end(), pattern);
+        std::sregex_iterator end;
+
+        compilerOptions.clear();
+        while (it != end) {
+            compilerOptions.push_back((*it)[1]); // Nimmt das erste Capturing Group-Ergebnis
+            ++it;
+        }
+
+
+        std::cout << compilerOptions.size() << std::endl;
+        for (const auto& wert : compilerOptions) {
+            std::cout << wert << std::endl;
+        }
+
+
         if(!initializationDone)
         {   
             if(SUCCESS!=loadLibrarys()) return;
@@ -55,32 +79,15 @@ namespace xcpp
            
             if(SUCCESS!=declareNVRTCVar())  return;
            
-            if(SUCCESS!=initDevice(false))  return;  //TODO Kopfzeilenparameter von Zelle nutzen um diese Option freizuschalten
+            if(SUCCESS!=initDevice())  return;  //TODO Kopfzeilenparameter von Zelle nutzen um diese Option freizuschalten
 
             initializationDone=true;    
         }   
-
-
-        std::string clingInput;
-        cling::Value output;
-        for (int i = 0; i < foundCUDADevices; i++)
+        if(printDeviceInfo)
         {
-            clingInput = 
-            R"RawMarker(
-                for (int i = 0; i < CUDAdeviceCount; i++) {
-
-                    cuDeviceGet(&deviceInfo, i);
-            
-                    char gpuName[256];
-                    cuDeviceGetName(gpuName, 256, deviceInfo);
-    
-                    std::cout << "GPU: " << gpuName << "    CUdevice VarName: device"<< i << std::endl;
-                } 
-            )RawMarker";
-            m_interpreter.process(clingInput, &output);
-        }
-        
-
+            if(SUCCESS!=getDeviceInfo()) return;
+        } 
+        if(SUCCESS!=printDeviceName()) return;
 
         definePTX(cell);
 
@@ -184,7 +191,23 @@ namespace xcpp
         m_interpreter.process(clingInput, &output);
         
 
-        clingInput = "result =nvrtcCompileProgram(" + generateProgVarName + ",0,nullptr);";
+
+        //TODO!!!
+
+        if(compilerOptions.size()==0) clingInput = "result =nvrtcCompileProgram(" + generateProgVarName + ",0,nullptr);";
+        else
+        {
+            std::string options = "const char* options[] = {\n";    //TODO NAME
+
+            for (const std::string& sopt : compilerOptions) {
+                options += "\"" + sopt + "\",";
+            }
+            options += "};";
+            m_interpreter.process(options, &output);
+
+            clingInput = "result =nvrtcCompileProgram(" + generateProgVarName + "," + std::to_string(compilerOptions.size()) +",options);";
+        }  
+    
         m_interpreter.process(clingInput, &output);
 
 
@@ -280,7 +303,7 @@ namespace xcpp
         return SUCCESS;
     } 
 
-    int nvrtc::initDevice(bool getDeviceInfo)
+    int nvrtc::initDevice()
     {
         cling::Value output;
         std::string clingInput= "cuInit(0);"; 
@@ -307,14 +330,16 @@ namespace xcpp
             m_interpreter.process(clingInput, &output);
             m_interpreter.declare("CUmodule cuModule"+ std::to_string(i) + ";");
         } 
-        
+        return 0;
+    } 
 
-        
-        if(getDeviceInfo)
-        {
-            clingInput= "std::cout << \"Found CUDA capable devices: \"<< CUDAdeviceCount <<std::endl;"; 
-            m_interpreter.process(clingInput, &output);
-            clingInput = R"RawMarker( 
+
+    int nvrtc::getDeviceInfo()
+    {
+        cling::Value output;
+        std::string clingInput= "std::cout << \"Found CUDA capable devices: \"<< CUDAdeviceCount <<std::endl;"; 
+        m_interpreter.process(clingInput, &output);
+        clingInput = R"RawMarker( 
 
             int maxVersion = 0, maxVersionIndex = 0;
             int minVersion = 999, minVersionIndex = 999;
@@ -353,30 +378,14 @@ namespace xcpp
 
 
             )RawMarker";
-            m_interpreter.process(clingInput, &output);
-        }     
-
-        
-
-       // if(foundCUDADevices==1)
-      //  {
-       //     clingInput= "cuDeviceGet(&device0, 0);"; 
-       //     m_interpreter.process(clingInput, &output);
-       //     m_interpreter.declare("CUcontext cuContext0;");
-        //    clingInput = "checkCudaError(cuCtxCreate(&cuContext0, 0, device0));";
-       //     m_interpreter.process(clingInput, &output);
-       //     m_interpreter.declare("CUmodule cuModule0;");
-     //   } 
-       // else if(foundCUDADevices>1)
-        //{
-            
-       // } 
-
-
-
-
-        return 0;
+            if(m_interpreter.process(clingInput, &output)!=cling::Interpreter::CompilationResult::kSuccess)
+            {
+                return ERROR_CODE;
+            } 
+        return SUCCESS;   
     } 
+
+
 
     std::list<std::string> nvrtc::extractFunctionNames(const std::string& ptx)
     {
@@ -392,4 +401,35 @@ namespace xcpp
         }
         return listOfFunctions;
     }
+
+    int nvrtc::printDeviceName()
+    {
+        std::string clingInput;
+        cling::Value output;
+        if(foundCUDADevices>1)
+        {
+            for (int i = 0; i < foundCUDADevices; i++)
+            {
+                clingInput = 
+                R"RawMarker(
+                    for (int i = 0; i < CUDAdeviceCount; i++) {
+
+                        cuDeviceGet(&deviceInfo, i);
+                
+                        char gpuName[256];
+                        cuDeviceGetName(gpuName, 256, deviceInfo);
+        
+                        std::cout << "GPU: " << gpuName << "    CUdevice VarName: device"<< i << std::endl;
+                    } 
+                )RawMarker";
+                if(m_interpreter.process(clingInput, &output)!=cling::Interpreter::CompilationResult::kSuccess)
+                {
+                    return ERROR_CODE;
+                } 
+            }
+        } 
+        return SUCCESS;  
+    } 
+
+
 }
