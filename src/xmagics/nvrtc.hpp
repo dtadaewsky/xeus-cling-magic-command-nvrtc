@@ -31,9 +31,17 @@ namespace xcpp
         int initDevice();
         int getDeviceInfo();
         int printDeviceName();
+        int getCompileOptions(const std::string& line);
+        int getIncludePaths(const std::string& code);
+
+
         std::list<std::string> extractFunctionNames(const std::string& ptx);
+        std::string removeComments(const std::string& code);
+        std::string getContent(const std::string& headerPath);
+
 
         std::vector<std::string> compilerOptions;
+        std::vector<std::string> foundHeaders;
         std::list<std::string> registeredFunctionNames;
 
         cling::Interpreter& m_interpreter;

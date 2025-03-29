@@ -43,7 +43,46 @@ namespace xcpp
         generateNVRTC(line,cell);
     }
 
-    void nvrtc::generateNVRTC(const std::string& line, const std::string& cell)
+    std::string nvrtc::removeComments(const std::string& code){
+        //regex for single line comment
+        std::regex singleLineCommentPattern("//.*");
+        //regex for multi line comment
+        std::regex multiLineCommentPattern("/\\*[\\s\\S]*?\\*/");
+        //remove both pattern
+        std::string withoutSLComment= std::regex_replace(code,singleLineCommentPattern,"");
+        return std::regex_replace(withoutSLComment,multiLineCommentPattern,"");
+    }
+
+
+    int nvrtc::getIncludePaths(const std::string& cell)
+    {
+        std::string cellWithoutComment=removeComments(cell);     //exclude Commet to not use comment include definitions
+
+        std::regex pattern(R"#(#include\s*<([^>]+)>|#include\s*"([^"]+)")#");
+        std::smatch match;
+        foundHeaders.clear();
+
+        std::string::const_iterator searchStart(cellWithoutComment.cbegin());
+        while (std::regex_search(searchStart, cellWithoutComment.cend(), match, pattern)) {
+            if (match[1].matched) {
+                foundHeaders.push_back(match[1].str());
+            } else if (match[2].matched) {
+                foundHeaders.push_back(match[2].str());
+            }
+            searchStart = match.suffix().first;
+        }
+
+        for (const auto& header : foundHeaders) {
+            std::cout << header << std::endl;
+            std::cout << foundHeaders.size() << std::endl;
+        }
+
+
+        return SUCCESS;
+    } 
+
+
+    int nvrtc::getCompileOptions(const std::string& line)
     {
         std::regex GPUInfo(R"(-GPUInfo(\s|$))");
         if (std::regex_search(line, GPUInfo)) {
@@ -52,22 +91,22 @@ namespace xcpp
             printDeviceInfo=false;
         }
 
-        std::regex pattern(R"(-co\s+((?:[^\s](?:[^\s]*))))"); // Sucht "-co" gefolgt von Wörtern ohne "-" davor
+        std::regex pattern(R"(-co\s+((?:[^\s](?:[^\s]*))))"); 
         std::sregex_iterator it(line.begin(), line.end(), pattern);
         std::sregex_iterator end;
 
         compilerOptions.clear();
         while (it != end) {
-            compilerOptions.push_back((*it)[1]); // Nimmt das erste Capturing Group-Ergebnis
+            compilerOptions.push_back((*it)[1]); 
             ++it;
         }
+        return SUCCESS;
+    } 
 
-
-        std::cout << compilerOptions.size() << std::endl;
-        for (const auto& wert : compilerOptions) {
-            std::cout << wert << std::endl;
-        }
-
+    void nvrtc::generateNVRTC(const std::string& line, const std::string& cell)
+    {
+        getCompileOptions(line);
+        getIncludePaths(cell);
 
         if(!initializationDone)
         {   
@@ -88,6 +127,8 @@ namespace xcpp
             if(SUCCESS!=getDeviceInfo()) return;
         } 
         if(SUCCESS!=printDeviceName()) return;
+
+        
 
         definePTX(cell);
 
@@ -169,8 +210,12 @@ namespace xcpp
     {
         cling::Value output;
         std::string clingInput;
+        std::string clingInputBackup;
+        std::string clingInputIncludeNames;
+        std::string clingInputIncludeContent;
         std::string generateProgVarName = "prog"; 
-        
+        int headerIndex=0;
+
         generateProgVarName += std::to_string(index); //TODO  Sollte immer einen neuen namen haben, vielleicht auch mit index aus einer Variable
         
         std::string declareInput = "nvrtcProgram " +generateProgVarName + ";"; 
@@ -186,8 +231,48 @@ namespace xcpp
 
 
         clingInput = "checkCudaError(nvrtcCreateProgram(&" + generateProgVarName; 
-        clingInput += ", kernelCodeInCharArrey"+ std::to_string(index);
-        clingInput += ",\"xeus_cling.cu\",0,nullptr,nullptr));";
+        clingInput += ",kernelCodeInCharArrey"+ std::to_string(index);
+
+        if(foundHeaders.size()==0)
+        {
+            clingInput += ",\"xeus_cling.cu\",0,nullptr,nullptr));";
+        } 
+        else
+        {
+
+            clingInputBackup = "const char* header_names[] = {";
+            
+            for (const auto& header : foundHeaders) {
+                clingInputIncludeNames  ="const char* header"+std::to_string(headerIndex) +"_name =\"" + header + "\";";
+
+                m_interpreter.process(clingInputIncludeNames, &output);
+
+                clingInputBackup += "header"+ std::to_string(headerIndex) +"_name,";
+                headerIndex++;
+            }
+
+            clingInputBackup += "};";
+            m_interpreter.process(clingInputBackup, &output);
+
+
+            headerIndex=0;
+            clingInputBackup = "const char* headers[] = {";
+            for (const auto& header : foundHeaders) {
+                  clingInputIncludeContent  ="const char* header"+std::to_string(headerIndex) +"_content = R\"RawMarker(\n" + getContent(header) + ")RawMarker\";";
+                  m_interpreter.process(clingInputIncludeContent, &output);
+  
+                  clingInputBackup += "header"+ std::to_string(headerIndex) +"_content,";
+                  headerIndex++;
+              }
+              clingInputBackup += "};";
+              m_interpreter.process(clingInputBackup, &output);
+
+
+            clingInput += ",\"xeus_cling.cu\","+ std::to_string(foundHeaders.size()) +",headers,header_names));";
+        } 
+        
+
+
         m_interpreter.process(clingInput, &output);
         
 
@@ -430,6 +515,19 @@ namespace xcpp
         } 
         return SUCCESS;  
     } 
+
+    std::string nvrtc::getContent(const std::string& headerPath)
+    {
+         
+        std::string test =
+        "#ifndef CONSTANTS_H\n"
+        "#define CONSTANTS_H\n" 
+        "#define PI 3.1415926535\n"
+        "#define E 2.7182818284\n"
+        "#endif\n";
+        return test;
+    } 
+
 
 
 }
