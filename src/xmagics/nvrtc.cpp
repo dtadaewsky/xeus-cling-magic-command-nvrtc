@@ -289,15 +289,15 @@ namespace xcpp
                 {
                     if(foundCUDADevices==1)
                     {
-                        clingInput = "CUfunction "+ s +";";
+                        clingInput = "CUfunction "+ demangle(s) +";";
                         m_interpreter.declare(clingInput);
-                        std::cout << s << std::endl;
+                        std::cout << demangle(s) << std::endl;
                     } 
                     else
                     {
-                        clingInput = "CUfunction "+ s +"_GPU"+ std::to_string(i) + ";";
+                        clingInput = "CUfunction "+ demangle(s) +"_GPU"+ std::to_string(i) + ";";
                         m_interpreter.declare(clingInput);
-                        std::cout << s << "_GPU" << std::to_string(i)<< std::endl;
+                        std::cout << demangle(s) << "_GPU" << std::to_string(i)<< std::endl;
                     } 
                 } 
                 registeredFunctionNames.push_back(s);  
@@ -308,11 +308,11 @@ namespace xcpp
                 {
                     if(foundCUDADevices==1)
                     {
-                        std::cout << s << std::endl;
+                        std::cout << demangle(s) << std::endl;
                     } 
                     else
                     {
-                        std::cout << s << "_GPU" << std::to_string(i)<< std::endl;
+                        std::cout << demangle(s) << "_GPU" << std::to_string(i)<< std::endl;
                     } 
                 } 
             }  
@@ -322,12 +322,12 @@ namespace xcpp
             {
                 if(foundCUDADevices==1)
                 {
-                    clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ s + R"RawMarker(, cuModule0, ")RawMarker"+ s +"\"));";
+                    clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ demangle(s) + R"RawMarker(, cuModule0, ")RawMarker"+ s +"\"));";
                     m_interpreter.process(clingInput, &output);
                 }
                 else
                 {
-                    clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ s +"_GPU"+ std::to_string(i) + R"RawMarker(, cuModule)RawMarker" + std::to_string(i)+ R"RawMarker(, ")RawMarker"+ s + "\"));";
+                    clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ demangle(s) +"_GPU"+ std::to_string(i) + R"RawMarker(, cuModule)RawMarker" + std::to_string(i)+ R"RawMarker(, ")RawMarker"+ s + "\"));";
                     m_interpreter.process(clingInput, &output);
                 } 
             } 
@@ -554,4 +554,30 @@ namespace xcpp
         }
         return SUCCESS;
     } 
+
+    std::string nvrtc::demangle(const std::string& mangled) {
+        std::string result = mangled.substr(2); // remove _Z
+        
+        int lengthOfName,countNumbers =0;
+        while (true)
+        {
+            if (std::isdigit(result[0])) 
+            { 
+                countNumbers++;
+                result = result.substr(1);   //remove all numbers afer _Z
+            }
+            else break;
+        } 
+        try 
+        {
+            lengthOfName = std::stoi(mangled.substr(2,countNumbers));
+        } 
+        catch (const std::invalid_argument& e) {
+            std::cerr << "no number!" << std::endl;
+        } 
+        catch (const std::out_of_range& e) {
+            std::cerr << "out of range" << std::endl;
+        }
+        return mangled.substr(countNumbers +2 , lengthOfName) +"__"+ mangled.substr(countNumbers +2+lengthOfName);
+    }
 }

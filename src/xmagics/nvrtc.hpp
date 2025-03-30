@@ -39,7 +39,7 @@ namespace xcpp
         std::string readFileToString(const std::string& filePath);
 
         std::string getCudaIncludePath(const std::string line);
-
+        std::string demangle(const std::string& mangled);
 
         std::vector<std::string> compilerOptions;
         std::vector<std::string> foundHeaders;
