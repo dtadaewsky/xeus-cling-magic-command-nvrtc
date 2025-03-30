@@ -514,15 +514,20 @@ namespace xcpp
         std::string::const_iterator searchStart(cellWithoutComment.cbegin());
         while (std::regex_search(searchStart, cellWithoutComment.cend(), match, pattern)) {
             if (match[1].matched) {
-                tempContent=readFileToString(match[1].str());
-                foundHeaders.push_back(match[1].str());
-                foundContent.push_back(tempContent);
-                getIncludePaths(tempContent);
+                //if match allready found ignore this one //TODO List of matches exist allready oder ??
+                if (std::find(foundHeaders.begin(), foundHeaders.end(), match[1].str()) == foundHeaders.end()) {
+                    tempContent=readFileToString(match[1].str());
+                    foundHeaders.push_back(match[1].str());
+                    foundContent.push_back(tempContent);
+                    getIncludePaths(tempContent);
+                } 
             } else if (match[2].matched) {
-                tempContent=readFileToString(match[2].str());
-                foundHeaders.push_back(match[2].str());
-                foundContent.push_back(tempContent);
-                getIncludePaths(tempContent);
+                if (std::find(foundHeaders.begin(), foundHeaders.end(), match[2].str()) == foundHeaders.end()) {
+                    tempContent=readFileToString(match[2].str());
+                    foundHeaders.push_back(match[2].str());
+                    foundContent.push_back(tempContent);
+                    getIncludePaths(tempContent);
+                } 
             } 
             searchStart = match.suffix().first;
         }
