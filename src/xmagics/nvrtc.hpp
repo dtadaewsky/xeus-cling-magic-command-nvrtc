@@ -24,7 +24,7 @@ namespace xcpp
     private:
         void generateNVRTC(const std::string& line, const std::string& cell);
         int loadLibrarys();
-        int loadIncludes();
+        int loadIncludes(const std::string includePath);
         int defineCUDACheckError();
         int declareNVRTCVar();
         int definePTX(const std::string& code);
@@ -32,21 +32,25 @@ namespace xcpp
         int getDeviceInfo();
         int printDeviceName();
         int getCompileOptions(const std::string& line);
-        int getIncludePaths(const std::string& code);
-
+        int getIncludePaths(const std::string& content);
 
         std::list<std::string> extractFunctionNames(const std::string& ptx);
         std::string removeComments(const std::string& code);
-        std::string getContent(const std::string& headerPath);
+        std::string readFileToString(const std::string& filePath);
+
+        std::string getCudaIncludePath(const std::string line);
 
 
         std::vector<std::string> compilerOptions;
         std::vector<std::string> foundHeaders;
+        std::vector<std::string> foundContent;
         std::list<std::string> registeredFunctionNames;
+
+
 
         cling::Interpreter& m_interpreter;
         bool initializationDone=false;
-        int index=0;
+        int index=-1;
         int foundCUDADevices=0;
         bool printDeviceInfo=false;
 

@@ -43,76 +43,19 @@ namespace xcpp
         generateNVRTC(line,cell);
     }
 
-    std::string nvrtc::removeComments(const std::string& code){
-        //regex for single line comment
-        std::regex singleLineCommentPattern("//.*");
-        //regex for multi line comment
-        std::regex multiLineCommentPattern("/\\*[\\s\\S]*?\\*/");
-        //remove both pattern
-        std::string withoutSLComment= std::regex_replace(code,singleLineCommentPattern,"");
-        return std::regex_replace(withoutSLComment,multiLineCommentPattern,"");
-    }
-
-
-    int nvrtc::getIncludePaths(const std::string& cell)
-    {
-        std::string cellWithoutComment=removeComments(cell);     //exclude Commet to not use comment include definitions
-
-        std::regex pattern(R"#(#include\s*<([^>]+)>|#include\s*"([^"]+)")#");
-        std::smatch match;
-        foundHeaders.clear();
-
-        std::string::const_iterator searchStart(cellWithoutComment.cbegin());
-        while (std::regex_search(searchStart, cellWithoutComment.cend(), match, pattern)) {
-            if (match[1].matched) {
-                foundHeaders.push_back(match[1].str());
-            } else if (match[2].matched) {
-                foundHeaders.push_back(match[2].str());
-            }
-            searchStart = match.suffix().first;
-        }
-
-        for (const auto& header : foundHeaders) {
-            std::cout << header << std::endl;
-            std::cout << foundHeaders.size() << std::endl;
-        }
-
-
-        return SUCCESS;
-    } 
-
-
-    int nvrtc::getCompileOptions(const std::string& line)
-    {
-        std::regex GPUInfo(R"(-GPUInfo(\s|$))");
-        if (std::regex_search(line, GPUInfo)) {
-            printDeviceInfo=true;
-        } else {
-            printDeviceInfo=false;
-        }
-
-        std::regex pattern(R"(-co\s+((?:[^\s](?:[^\s]*))))"); 
-        std::sregex_iterator it(line.begin(), line.end(), pattern);
-        std::sregex_iterator end;
-
-        compilerOptions.clear();
-        while (it != end) {
-            compilerOptions.push_back((*it)[1]); 
-            ++it;
-        }
-        return SUCCESS;
-    } 
-
     void nvrtc::generateNVRTC(const std::string& line, const std::string& cell)
     {
         getCompileOptions(line);
+
+        foundHeaders.clear();
+        foundContent.clear();
         getIncludePaths(cell);
 
         if(!initializationDone)
         {   
             if(SUCCESS!=loadLibrarys()) return;
             
-            if(SUCCESS!=loadIncludes()) return;
+            if(SUCCESS!=loadIncludes(getCudaIncludePath(line))) return;
             
             if(SUCCESS!=defineCUDACheckError()) return;
            
@@ -128,10 +71,8 @@ namespace xcpp
         } 
         if(SUCCESS!=printDeviceName()) return;
 
-        
-
+    
         definePTX(cell);
-
 
     }
 
@@ -153,11 +94,19 @@ namespace xcpp
         return SUCCESS;
     }
 
-    int nvrtc::loadIncludes()
+    int nvrtc::loadIncludes(const std::string includePath)
     {
+       
         std::string nvrtcHeader = "/usr/local/cuda/include/nvrtc.h";    //TODO hier vielleicht ein Automatische suche nach den Daten
         std::string cudaHeader = "/usr/local/cuda/include/cuda.h";
        
+        if(includePath!="")
+        {
+            nvrtcHeader = includePath + "nvrtc.h";
+            cudaHeader = includePath + "cuda.h";
+        } 
+        
+
         if(m_interpreter.loadHeader(nvrtcHeader)!=cling::Interpreter::CompilationResult::kSuccess)
         {
             std::cerr << "Could not load header: " << nvrtcHeader << std::endl;
@@ -215,6 +164,7 @@ namespace xcpp
         std::string clingInputIncludeContent;
         std::string generateProgVarName = "prog"; 
         int headerIndex=0;
+        index++;
 
         generateProgVarName += std::to_string(index); //TODO  Sollte immer einen neuen namen haben, vielleicht auch mit index aus einer Variable
         
@@ -257,8 +207,8 @@ namespace xcpp
 
             headerIndex=0;
             clingInputBackup = "const char* headers[] = {";
-            for (const auto& header : foundHeaders) {
-                  clingInputIncludeContent  ="const char* header"+std::to_string(headerIndex) +"_content = R\"RawMarker(\n" + getContent(header) + ")RawMarker\";";
+            for (const auto& content : foundContent) {
+                  clingInputIncludeContent  ="const char* header"+std::to_string(headerIndex) +"_content = R\"RawMarker(\n" + content + ")RawMarker\";";
                   m_interpreter.process(clingInputIncludeContent, &output);
   
                   clingInputBackup += "header"+ std::to_string(headerIndex) +"_content,";
@@ -383,7 +333,7 @@ namespace xcpp
             } 
         } 
 
-        index++;
+        
 
         return SUCCESS;
     } 
@@ -516,18 +466,87 @@ namespace xcpp
         return SUCCESS;  
     } 
 
-    std::string nvrtc::getContent(const std::string& headerPath)
+    std::string nvrtc::getCudaIncludePath(const std::string line)
     {
-         
-        std::string test =
-        "#ifndef CONSTANTS_H\n"
-        "#define CONSTANTS_H\n" 
-        "#define PI 3.1415926535\n"
-        "#define E 2.7182818284\n"
-        "#endif\n";
-        return test;
+        std::regex pattern(R"(-cudaPath\s+((?:[^\s](?:[^\s]*))))"); 
+        std::smatch match; 
+        std::string path;
+        if (std::regex_search(line,match, pattern)) {
+            path = match[1].str();
+            if(path.back()!='/') path += "/";
+            if(path.front()!='/') path = "/" + path;
+            return path;
+        } 
+        return "";
     } 
 
+    std::string nvrtc::readFileToString(const std::string& filePath) {
+        std::ifstream file(filePath);
+        if (!file) {
+            throw std::runtime_error("Could not open File: " + filePath);
+        }
+    
+        std::stringstream buffer;
+        buffer << file.rdbuf();  // Datei in den Stringstream einlesen
+        return buffer.str();
+    }
 
 
+
+    std::string nvrtc::removeComments(const std::string& code){
+        //regex for single line comment
+        std::regex singleLineCommentPattern("//.*");
+        //regex for multi line comment
+        std::regex multiLineCommentPattern("/\\*[\\s\\S]*?\\*/");
+        //remove both pattern
+        std::string withoutSLComment= std::regex_replace(code,singleLineCommentPattern,"");
+        return std::regex_replace(withoutSLComment,multiLineCommentPattern,"");
+    }
+    int nvrtc::getIncludePaths(const std::string& content)
+    {
+        std::string tempContent;
+        std::string cellWithoutComment=removeComments(content);     //exclude Commet to not use comment include definitions
+
+        std::regex pattern(R"#(#include\s*<([^>]+)>|#include\s*"([^"]+)")#");
+        std::smatch match;
+
+
+        std::string::const_iterator searchStart(cellWithoutComment.cbegin());
+        while (std::regex_search(searchStart, cellWithoutComment.cend(), match, pattern)) {
+            if (match[1].matched) {
+                tempContent=readFileToString(match[1].str());
+                foundHeaders.push_back(match[1].str());
+                foundContent.push_back(tempContent);
+                getIncludePaths(tempContent);
+            } else if (match[2].matched) {
+                tempContent=readFileToString(match[2].str());
+                foundHeaders.push_back(match[2].str());
+                foundContent.push_back(tempContent);
+                getIncludePaths(tempContent);
+            } 
+            searchStart = match.suffix().first;
+        }
+        return SUCCESS;
+    } 
+
+    int nvrtc::getCompileOptions(const std::string& line)
+    {
+        std::regex GPUInfo(R"(-GPUInfo(\s|$))");
+        if (std::regex_search(line, GPUInfo)) {
+            printDeviceInfo=true;
+        } else {
+            printDeviceInfo=false;
+        }
+
+        std::regex pattern(R"(-co\s+((?:[^\s](?:[^\s]*))))"); 
+        std::sregex_iterator it(line.begin(), line.end(), pattern);
+        std::sregex_iterator end;
+
+        compilerOptions.clear();
+        while (it != end) {
+            compilerOptions.push_back((*it)[1]); 
+            ++it;
+        }
+        return SUCCESS;
+    } 
 }
