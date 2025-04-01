@@ -1,34 +1,34 @@
 #include "nvrtc.hpp"
 
-#include <string>
+//#include <string>
 #include <fstream>
-#include <iostream>
-#include <vector>
-#include <list>
-#include <functional>
-#include <cstdio>
-#include "xeus-cling/xoptions.hpp"
+//#include <iostream>
+//#include <vector>
+//#include <list>
+//#include <functional>
+//#include <cstdio>
+//#include "xeus-cling/xoptions.hpp"
 
-#include "../xparser.hpp"
+//#include "../xparser.hpp"
 
-#include <stdexcept>
-#include <dlfcn.h>
-#include "cling/Interpreter/Interpreter.h"
+//#include <stdexcept>
+//#include <dlfcn.h>
+//#include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Value.h"
-#include "cling/Interpreter/RuntimeOptions.h"
-#include "clang/Frontend/CompilerInstance.h"
-#include "clang/CodeGen/ModuleBuilder.h"
-#include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/CodeGen/BackendUtil.h"
+//#include "cling/Interpreter/RuntimeOptions.h"
+//#include "clang/Frontend/CompilerInstance.h"
+//#include "clang/CodeGen/ModuleBuilder.h"
+//#include "clang/AST/RecursiveASTVisitor.h"
+//#include "clang/CodeGen/BackendUtil.h"
 
-#include <unordered_map>
-#include <unordered_set>
-#include <cstdlib>
-#include <ctime>
-#include <clang-c/Index.h>
+//#include <unordered_map>
+//#include <unordered_set>
+//#include <cstdlib>
+//#include <ctime>
+//#include <clang-c/Index.h>
 
 #include "../xmime_internal.hpp"
-#include <regex>
+//#include <regex>
 
 
 #define ERROR_CODE -1
@@ -73,8 +73,61 @@ namespace xcpp
 
     
         definePTX(cell);
-
+        generateKernelFunction();
     }
+
+    int nvrtc::getCompileOptions(const std::string& line)
+    {
+        std::regex GPUInfo(R"(-GPUInfo(\s|$))");
+        if (std::regex_search(line, GPUInfo)) {
+            printDeviceInfo=true;
+        } else {
+            printDeviceInfo=false;
+        }
+
+        std::regex pattern(R"(-co\s+((?:[^\s](?:[^\s]*))))"); 
+        std::sregex_iterator it(line.begin(), line.end(), pattern);
+        std::sregex_iterator end;
+
+        compilerOptions.clear();
+        while (it != end) {
+            compilerOptions.push_back((*it)[1]); 
+            ++it;
+        }
+        return SUCCESS;
+    } 
+
+    int nvrtc::getIncludePaths(const std::string& content)
+    {
+        std::string tempContent;
+        std::string cellWithoutComment=removeComments(content);     //exclude Commet to not use comment include definitions
+
+        std::regex pattern(R"#(#include\s*<([^>]+)>|#include\s*"([^"]+)")#");
+        std::smatch match;
+
+
+        std::string::const_iterator searchStart(cellWithoutComment.cbegin());
+        while (std::regex_search(searchStart, cellWithoutComment.cend(), match, pattern)) {
+            if (match[1].matched) {
+                //if match allready found ignore this one //TODO List of matches exist allready oder ??
+                if (std::find(foundHeaders.begin(), foundHeaders.end(), match[1].str()) == foundHeaders.end()) {
+                    tempContent=readFileToString(match[1].str());
+                    foundHeaders.push_back(match[1].str());
+                    foundContent.push_back(tempContent);
+                    getIncludePaths(tempContent);
+                } 
+            } else if (match[2].matched) {
+                if (std::find(foundHeaders.begin(), foundHeaders.end(), match[2].str()) == foundHeaders.end()) {
+                    tempContent=readFileToString(match[2].str());
+                    foundHeaders.push_back(match[2].str());
+                    foundContent.push_back(tempContent);
+                    getIncludePaths(tempContent);
+                } 
+            } 
+            searchStart = match.suffix().first;
+        }
+        return SUCCESS;
+    } 
 
     int nvrtc::loadLibrarys()
     {
@@ -155,6 +208,87 @@ namespace xcpp
         return SUCCESS;
     } 
     
+    int nvrtc::initDevice()
+    {
+        cling::Value output;
+        std::string clingInput= "cuInit(0);"; 
+        m_interpreter.process(clingInput, &output);
+
+        clingInput= "CUdevice deviceInfo; int CUDAdeviceCount = 0; checkCudaError(cuDeviceGetCount(&CUDAdeviceCount));CUDAdeviceCount;"; 
+        m_interpreter.process(clingInput, &output);
+        foundCUDADevices= output.getLL();
+
+        ///foundCUDADevices=2; //TODO TEST!!!
+
+        for (int i = 0; i < foundCUDADevices; i++)
+        {
+            if(m_interpreter.declare("CUdevice device"+ std::to_string(i) +";")!=cling::Interpreter::CompilationResult::kSuccess)
+            {
+                std::cerr << "Could not init device: " << std::to_string(i) <<std::endl;
+                //  return ERROR_CODE;
+            }
+           // std::cout << "device: " << std::to_string(i) << std::endl;
+            clingInput= "checkCudaError(cuDeviceGet(&device"+ std::to_string(i) + ", " + std::to_string(i) + "));"; 
+            m_interpreter.process(clingInput, &output);
+            m_interpreter.declare("CUcontext cuContext"+std::to_string(i)+";");
+            clingInput = "checkCudaError(cuCtxCreate(&cuContext" + std::to_string(i) + ", 0, device" + std::to_string(i) + "));";
+            m_interpreter.process(clingInput, &output);
+            m_interpreter.declare("CUmodule cuModule"+ std::to_string(i) + ";");
+        } 
+        return 0;
+    }
+
+    int nvrtc::getDeviceInfo()
+    {
+        cling::Value output;
+        std::string clingInput= "std::cout << \"Found CUDA capable devices: \"<< CUDAdeviceCount <<std::endl;"; 
+        m_interpreter.process(clingInput, &output);
+        clingInput = R"RawMarker( 
+
+            int maxVersion = 0, maxVersionIndex = 0;
+            int minVersion = 999, minVersionIndex = 999;
+            
+            for (int i = 0; i < CUDAdeviceCount; i++) {
+
+                cuDeviceGet(&deviceInfo, i);
+        
+                char gpuName[256];
+                cuDeviceGetName(gpuName, 256, deviceInfo);
+        
+                int version, versionIndex;
+                cuDeviceGetAttribute(&version, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, deviceInfo);
+                cuDeviceGetAttribute(&versionIndex, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, deviceInfo);
+        
+                std::cout << "GPU Number:" << i << ": " << gpuName << std::endl;
+                std::cout << "Compute Capability: " << version << "." << versionIndex << std::endl;
+                std::cout << "Recommended NVCC-Architecture: -arch=sm_" << version  <<  versionIndex << std::endl;
+        
+                
+                if (version > maxVersion || (version == maxVersion && versionIndex > maxVersionIndex)) {
+                    maxVersion = version;
+                    maxVersionIndex = versionIndex;
+                }
+        
+                if (version < minVersion || (version == minVersion && versionIndex < minVersionIndex)) {
+                    minVersion = version;
+                    minVersionIndex = versionIndex;
+                }
+            }
+            if(CUDAdeviceCount>1)
+            {
+                std::cout << "Max. Compute Capability: " << maxVersion << "." << maxVersionIndex << std::endl;
+                std::cout << "Min. Compute Capability: " << minVersion << "." << minVersionIndex << std::endl;
+            }
+
+
+            )RawMarker";
+            if(m_interpreter.process(clingInput, &output)!=cling::Interpreter::CompilationResult::kSuccess)
+            {
+                return ERROR_CODE;
+            } 
+        return SUCCESS;   
+    }
+
     int nvrtc::definePTX(const std::string& code)
     {
         cling::Value output;
@@ -227,12 +361,12 @@ namespace xcpp
         
 
 
-        //TODO!!!
+    
 
         if(compilerOptions.size()==0) clingInput = "result =nvrtcCompileProgram(" + generateProgVarName + ",0,nullptr);";
         else
         {
-            std::string options = "const char* options[] = {\n";    //TODO NAME
+            std::string options = "const char* options[] = {\n";    
 
             for (const std::string& sopt : compilerOptions) {
                 options += "\"" + sopt + "\",";
@@ -273,8 +407,19 @@ namespace xcpp
         m_interpreter.process(clingInput, &output);
         nl::json pub_data = mime_repr(output);
 
-        std::list<std::string> listOfNames = extractFunctionNames(pub_data["text/plain"].get<std::string>());
+        listOfNames.clear();                                                                        //clear data from run before
+        listOfNames = extractFunctionNames(pub_data["text/plain"].get<std::string>());
  
+        return SUCCESS;
+    } 
+
+    int nvrtc::generateKernelFunction()
+    { 
+        cling::Value output;
+        std::string clingInput;
+
+
+
         for (int i = 0; i < foundCUDADevices; i++)
         {
             clingInput = "cuModuleLoadData(&cuModule" + std::to_string(i) + ", ptx" + std::to_string(index) + ");";
@@ -333,94 +478,8 @@ namespace xcpp
             } 
         } 
 
-        
-
         return SUCCESS;
     } 
-
-    int nvrtc::initDevice()
-    {
-        cling::Value output;
-        std::string clingInput= "cuInit(0);"; 
-        m_interpreter.process(clingInput, &output);
-
-        clingInput= "CUdevice deviceInfo; int CUDAdeviceCount = 0; checkCudaError(cuDeviceGetCount(&CUDAdeviceCount));CUDAdeviceCount;"; 
-        m_interpreter.process(clingInput, &output);
-        foundCUDADevices= output.getLL();
-
-        ///foundCUDADevices=2; //TODO TEST!!!
-
-        for (int i = 0; i < foundCUDADevices; i++)
-        {
-            if(m_interpreter.declare("CUdevice device"+ std::to_string(i) +";")!=cling::Interpreter::CompilationResult::kSuccess)
-            {
-                std::cerr << "Could not init device: " << std::to_string(i) <<std::endl;
-                //  return ERROR_CODE;
-            }
-           // std::cout << "device: " << std::to_string(i) << std::endl;
-            clingInput= "checkCudaError(cuDeviceGet(&device"+ std::to_string(i) + ", " + std::to_string(i) + "));"; 
-            m_interpreter.process(clingInput, &output);
-            m_interpreter.declare("CUcontext cuContext"+std::to_string(i)+";");
-            clingInput = "checkCudaError(cuCtxCreate(&cuContext" + std::to_string(i) + ", 0, device" + std::to_string(i) + "));";
-            m_interpreter.process(clingInput, &output);
-            m_interpreter.declare("CUmodule cuModule"+ std::to_string(i) + ";");
-        } 
-        return 0;
-    } 
-
-
-    int nvrtc::getDeviceInfo()
-    {
-        cling::Value output;
-        std::string clingInput= "std::cout << \"Found CUDA capable devices: \"<< CUDAdeviceCount <<std::endl;"; 
-        m_interpreter.process(clingInput, &output);
-        clingInput = R"RawMarker( 
-
-            int maxVersion = 0, maxVersionIndex = 0;
-            int minVersion = 999, minVersionIndex = 999;
-            
-            for (int i = 0; i < CUDAdeviceCount; i++) {
-
-                cuDeviceGet(&deviceInfo, i);
-        
-                char gpuName[256];
-                cuDeviceGetName(gpuName, 256, deviceInfo);
-        
-                int version, versionIndex;
-                cuDeviceGetAttribute(&version, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, deviceInfo);
-                cuDeviceGetAttribute(&versionIndex, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, deviceInfo);
-        
-                std::cout << "GPU Number:" << i << ": " << gpuName << std::endl;
-                std::cout << "Compute Capability: " << version << "." << versionIndex << std::endl;
-                std::cout << "Recommended NVCC-Architecture: -arch=sm_" << version  <<  versionIndex << std::endl;
-        
-                
-                if (version > maxVersion || (version == maxVersion && versionIndex > maxVersionIndex)) {
-                    maxVersion = version;
-                    maxVersionIndex = versionIndex;
-                }
-        
-                if (version < minVersion || (version == minVersion && versionIndex < minVersionIndex)) {
-                    minVersion = version;
-                    minVersionIndex = versionIndex;
-                }
-            }
-            if(CUDAdeviceCount>1)
-            {
-                std::cout << "Max. Compute Capability: " << maxVersion << "." << maxVersionIndex << std::endl;
-                std::cout << "Min. Compute Capability: " << minVersion << "." << minVersionIndex << std::endl;
-            }
-
-
-            )RawMarker";
-            if(m_interpreter.process(clingInput, &output)!=cling::Interpreter::CompilationResult::kSuccess)
-            {
-                return ERROR_CODE;
-            } 
-        return SUCCESS;   
-    } 
-
-
 
     std::list<std::string> nvrtc::extractFunctionNames(const std::string& ptx)
     {
@@ -491,8 +550,6 @@ namespace xcpp
         return buffer.str();
     }
 
-
-
     std::string nvrtc::removeComments(const std::string& code){
         //regex for single line comment
         std::regex singleLineCommentPattern("//.*");
@@ -502,63 +559,11 @@ namespace xcpp
         std::string withoutSLComment= std::regex_replace(code,singleLineCommentPattern,"");
         return std::regex_replace(withoutSLComment,multiLineCommentPattern,"");
     }
-    int nvrtc::getIncludePaths(const std::string& content)
-    {
-        std::string tempContent;
-        std::string cellWithoutComment=removeComments(content);     //exclude Commet to not use comment include definitions
-
-        std::regex pattern(R"#(#include\s*<([^>]+)>|#include\s*"([^"]+)")#");
-        std::smatch match;
-
-
-        std::string::const_iterator searchStart(cellWithoutComment.cbegin());
-        while (std::regex_search(searchStart, cellWithoutComment.cend(), match, pattern)) {
-            if (match[1].matched) {
-                //if match allready found ignore this one //TODO List of matches exist allready oder ??
-                if (std::find(foundHeaders.begin(), foundHeaders.end(), match[1].str()) == foundHeaders.end()) {
-                    tempContent=readFileToString(match[1].str());
-                    foundHeaders.push_back(match[1].str());
-                    foundContent.push_back(tempContent);
-                    getIncludePaths(tempContent);
-                } 
-            } else if (match[2].matched) {
-                if (std::find(foundHeaders.begin(), foundHeaders.end(), match[2].str()) == foundHeaders.end()) {
-                    tempContent=readFileToString(match[2].str());
-                    foundHeaders.push_back(match[2].str());
-                    foundContent.push_back(tempContent);
-                    getIncludePaths(tempContent);
-                } 
-            } 
-            searchStart = match.suffix().first;
-        }
-        return SUCCESS;
-    } 
-
-    int nvrtc::getCompileOptions(const std::string& line)
-    {
-        std::regex GPUInfo(R"(-GPUInfo(\s|$))");
-        if (std::regex_search(line, GPUInfo)) {
-            printDeviceInfo=true;
-        } else {
-            printDeviceInfo=false;
-        }
-
-        std::regex pattern(R"(-co\s+((?:[^\s](?:[^\s]*))))"); 
-        std::sregex_iterator it(line.begin(), line.end(), pattern);
-        std::sregex_iterator end;
-
-        compilerOptions.clear();
-        while (it != end) {
-            compilerOptions.push_back((*it)[1]); 
-            ++it;
-        }
-        return SUCCESS;
-    } 
-
+    
     std::string nvrtc::demangle(const std::string& mangled) {
         std::string result = mangled.substr(2); // remove _Z
         
-        int lengthOfName,countNumbers =0;
+        int lengthOfName=0,countNumbers =0;
         while (true)
         {
             if (std::isdigit(result[0])) 
