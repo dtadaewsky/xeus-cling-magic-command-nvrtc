@@ -2,9 +2,6 @@
 #define XMAGICS_NVRTC_HPP
 
 
-
-
-
 #include "cling/Interpreter/Interpreter.h"
 #include "xeus-cling/xmagics.hpp"
 #include "xeus-cling/xoptions.hpp"
@@ -33,7 +30,7 @@ namespace xcpp
         int printDeviceName();
         int getCompileOptions(const std::string& line);
         int getIncludePaths(const std::string& content);
-
+        int generateKernelFunction();
         std::list<std::string> extractFunctionNames(const std::string& ptx);
         std::string removeComments(const std::string& code);
         std::string readFileToString(const std::string& filePath);
@@ -45,7 +42,7 @@ namespace xcpp
         std::vector<std::string> foundHeaders;
         std::vector<std::string> foundContent;
         std::list<std::string> registeredFunctionNames;
-
+        std::list<std::string> listOfNames;
 
 
         cling::Interpreter& m_interpreter;
@@ -54,8 +51,6 @@ namespace xcpp
         int foundCUDADevices=0;
         bool printDeviceInfo=false;
 
-        //xcpp::interpreter& x_interpreter;
-        
     };
 }  
 

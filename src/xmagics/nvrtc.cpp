@@ -1,40 +1,11 @@
 #include "nvrtc.hpp"
 
-//#include <string>
 #include <fstream>
-//#include <iostream>
-//#include <vector>
-//#include <list>
-//#include <functional>
-//#include <cstdio>
-//#include "xeus-cling/xoptions.hpp"
-
-//#include "../xparser.hpp"
-
-//#include <stdexcept>
-//#include <dlfcn.h>
-//#include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Value.h"
-//#include "cling/Interpreter/RuntimeOptions.h"
-//#include "clang/Frontend/CompilerInstance.h"
-//#include "clang/CodeGen/ModuleBuilder.h"
-//#include "clang/AST/RecursiveASTVisitor.h"
-//#include "clang/CodeGen/BackendUtil.h"
-
-//#include <unordered_map>
-//#include <unordered_set>
-//#include <cstdlib>
-//#include <ctime>
-//#include <clang-c/Index.h>
-
 #include "../xmime_internal.hpp"
-//#include <regex>
-
 
 #define ERROR_CODE -1
 #define SUCCESS 0
-
-
 
 namespace xcpp
 {
@@ -200,7 +171,7 @@ namespace xcpp
     
     int nvrtc::declareNVRTCVar()
     {
-        if(m_interpreter.declare("nvrtcResult result;")!=cling::Interpreter::CompilationResult::kSuccess)
+        if(m_interpreter.declare("nvrtcResult XCnvrtc_result;")!=cling::Interpreter::CompilationResult::kSuccess)
         {
             std::cerr << "Could not declare nvrtcResult" << std::endl;
             return ERROR_CODE;
@@ -214,26 +185,24 @@ namespace xcpp
         std::string clingInput= "cuInit(0);"; 
         m_interpreter.process(clingInput, &output);
 
-        clingInput= "CUdevice deviceInfo; int CUDAdeviceCount = 0; checkCudaError(cuDeviceGetCount(&CUDAdeviceCount));CUDAdeviceCount;"; 
+        clingInput= "CUdevice XCnvrtc_deviceInfo; int XCnvrtc_CUDAdeviceCount = 0; checkCudaError(cuDeviceGetCount(&XCnvrtc_CUDAdeviceCount));XCnvrtc_CUDAdeviceCount;"; 
         m_interpreter.process(clingInput, &output);
         foundCUDADevices= output.getLL();
 
-        ///foundCUDADevices=2; //TODO TEST!!!
-
         for (int i = 0; i < foundCUDADevices; i++)
         {
-            if(m_interpreter.declare("CUdevice device"+ std::to_string(i) +";")!=cling::Interpreter::CompilationResult::kSuccess)
+            if(m_interpreter.declare("CUdevice XCnvrtc_device"+ std::to_string(i) +";")!=cling::Interpreter::CompilationResult::kSuccess)
             {
                 std::cerr << "Could not init device: " << std::to_string(i) <<std::endl;
                 //  return ERROR_CODE;
             }
            // std::cout << "device: " << std::to_string(i) << std::endl;
-            clingInput= "checkCudaError(cuDeviceGet(&device"+ std::to_string(i) + ", " + std::to_string(i) + "));"; 
+            clingInput= "checkCudaError(cuDeviceGet(&XCnvrtc_device"+ std::to_string(i) + ", " + std::to_string(i) + "));"; 
             m_interpreter.process(clingInput, &output);
-            m_interpreter.declare("CUcontext cuContext"+std::to_string(i)+";");
-            clingInput = "checkCudaError(cuCtxCreate(&cuContext" + std::to_string(i) + ", 0, device" + std::to_string(i) + "));";
+            m_interpreter.declare("CUcontext XCnvrtc_cuContext"+std::to_string(i)+";");
+            clingInput = "checkCudaError(cuCtxCreate(&XCnvrtc_cuContext" + std::to_string(i) + ", 0, XCnvrtc_device" + std::to_string(i) + "));";
             m_interpreter.process(clingInput, &output);
-            m_interpreter.declare("CUmodule cuModule"+ std::to_string(i) + ";");
+            m_interpreter.declare("CUmodule XCnvrtc_cuModule"+ std::to_string(i) + ";");
         } 
         return 0;
     }
@@ -241,43 +210,43 @@ namespace xcpp
     int nvrtc::getDeviceInfo()
     {
         cling::Value output;
-        std::string clingInput= "std::cout << \"Found CUDA capable devices: \"<< CUDAdeviceCount <<std::endl;"; 
+        std::string clingInput= "std::cout << \"Found CUDA capable devices: \"<< XCnvrtc_CUDAdeviceCount <<std::endl;"; 
         m_interpreter.process(clingInput, &output);
         clingInput = R"RawMarker( 
 
-            int maxVersion = 0, maxVersionIndex = 0;
-            int minVersion = 999, minVersionIndex = 999;
+            int XCnvrtc_maxVersion = 0, XCnvrtc_maxVersionIndex = 0;
+            int XCnvrtc_minVersion = 999, XCnvrtc_minVersionIndex = 999;
             
-            for (int i = 0; i < CUDAdeviceCount; i++) {
+            for (int i = 0; i < XCnvrtc_CUDAdeviceCount; i++) {
 
-                cuDeviceGet(&deviceInfo, i);
+                cuDeviceGet(&XCnvrtc_deviceInfo, i);
         
-                char gpuName[256];
-                cuDeviceGetName(gpuName, 256, deviceInfo);
+                char XCnvrtc_gpuName[256];
+                cuDeviceGetName(XCnvrtc_gpuName, 256, XCnvrtc_deviceInfo);
         
-                int version, versionIndex;
-                cuDeviceGetAttribute(&version, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, deviceInfo);
-                cuDeviceGetAttribute(&versionIndex, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, deviceInfo);
+                int XCnvrtc_version, XCnvrtc_versionIndex;
+                cuDeviceGetAttribute(&XCnvrtc_version, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, XCnvrtc_deviceInfo);
+                cuDeviceGetAttribute(&XCnvrtc_versionIndex, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, XCnvrtc_deviceInfo);
         
-                std::cout << "GPU Number:" << i << ": " << gpuName << std::endl;
-                std::cout << "Compute Capability: " << version << "." << versionIndex << std::endl;
-                std::cout << "Recommended NVCC-Architecture: -arch=sm_" << version  <<  versionIndex << std::endl;
+                std::cout << "GPU Number:" << i << ": " << XCnvrtc_gpuName << std::endl;
+                std::cout << "Compute Capability: " << XCnvrtc_version << "." << XCnvrtc_versionIndex << std::endl;
+                std::cout << "Recommended NVCC-Architecture: -arch=sm_" << XCnvrtc_version  <<  XCnvrtc_versionIndex << std::endl;
         
                 
-                if (version > maxVersion || (version == maxVersion && versionIndex > maxVersionIndex)) {
-                    maxVersion = version;
-                    maxVersionIndex = versionIndex;
+                if (XCnvrtc_version > XCnvrtc_maxVersion || (XCnvrtc_version == XCnvrtc_maxVersion && XCnvrtc_versionIndex > XCnvrtc_maxVersionIndex)) {
+                    XCnvrtc_maxVersion = XCnvrtc_version;
+                    XCnvrtc_maxVersionIndex = XCnvrtc_versionIndex;
                 }
         
-                if (version < minVersion || (version == minVersion && versionIndex < minVersionIndex)) {
-                    minVersion = version;
-                    minVersionIndex = versionIndex;
+                if (XCnvrtc_version < XCnvrtc_minVersion || (XCnvrtc_version == XCnvrtc_minVersion && XCnvrtc_versionIndex < XCnvrtc_minVersionIndex)) {
+                    XCnvrtc_minVersion = XCnvrtc_version;
+                    XCnvrtc_minVersionIndex = XCnvrtc_versionIndex;
                 }
             }
-            if(CUDAdeviceCount>1)
+            if(XCnvrtc_CUDAdeviceCount>1)
             {
-                std::cout << "Max. Compute Capability: " << maxVersion << "." << maxVersionIndex << std::endl;
-                std::cout << "Min. Compute Capability: " << minVersion << "." << minVersionIndex << std::endl;
+                std::cout << "Max. Compute Capability: " << XCnvrtc_maxVersion << "." << XCnvrtc_maxVersionIndex << std::endl;
+                std::cout << "Min. Compute Capability: " << XCnvrtc_minVersion << "." << XCnvrtc_minVersionIndex << std::endl;
             }
 
 
@@ -296,7 +265,7 @@ namespace xcpp
         std::string clingInputBackup;
         std::string clingInputIncludeNames;
         std::string clingInputIncludeContent;
-        std::string generateProgVarName = "prog"; 
+        std::string generateProgVarName = "XCnvrtc_prog"; 
         int headerIndex=0;
         index++;
 
@@ -304,18 +273,18 @@ namespace xcpp
         
         std::string declareInput = "nvrtcProgram " +generateProgVarName + ";"; 
         m_interpreter.declare(declareInput);
-        std::string declarePTXSizeInput = "size_t ptxSize" + std::to_string(index); 
+        std::string declarePTXSizeInput = "size_t XCnvrtc_ptxSize" + std::to_string(index); 
         declarePTXSizeInput += ";";//TODO  Sollte immer einen neuen namen haben, vielleicht auch mit index aus einer Variable
         m_interpreter.declare(declarePTXSizeInput);
 
 
-        clingInput= "const char *kernelCodeInCharArrey"+ std::to_string(index);
+        clingInput= "const char *XCnvrtc_kernelCodeInCharArrey"+ std::to_string(index);
         clingInput += "=R\"RawMarker(" + code + ")RawMarker\";";
         m_interpreter.process(clingInput, &output);
 
 
         clingInput = "checkCudaError(nvrtcCreateProgram(&" + generateProgVarName; 
-        clingInput += ",kernelCodeInCharArrey"+ std::to_string(index);
+        clingInput += ",XCnvrtc_kernelCodeInCharArrey"+ std::to_string(index);
 
         if(foundHeaders.size()==0)
         {
@@ -324,14 +293,14 @@ namespace xcpp
         else
         {
 
-            clingInputBackup = "const char* header_names[] = {";
+            clingInputBackup = "const char* XCnvrtc_header_names[] = {";
             
             for (const auto& header : foundHeaders) {
-                clingInputIncludeNames  ="const char* header"+std::to_string(headerIndex) +"_name =\"" + header + "\";";
+                clingInputIncludeNames  ="const char* XCnvrtc_header"+std::to_string(headerIndex) +"_name =\"" + header + "\";";
 
                 m_interpreter.process(clingInputIncludeNames, &output);
 
-                clingInputBackup += "header"+ std::to_string(headerIndex) +"_name,";
+                clingInputBackup += "XCnvrtc_header"+ std::to_string(headerIndex) +"_name,";
                 headerIndex++;
             }
 
@@ -340,30 +309,24 @@ namespace xcpp
 
 
             headerIndex=0;
-            clingInputBackup = "const char* headers[] = {";
+            clingInputBackup = "const char* XCnvrtc_headers[] = {";
             for (const auto& content : foundContent) {
-                  clingInputIncludeContent  ="const char* header"+std::to_string(headerIndex) +"_content = R\"RawMarker(\n" + content + ")RawMarker\";";
+                  clingInputIncludeContent  ="const char* XCnvrtc_header"+std::to_string(headerIndex) +"_content = R\"RawMarker(\n" + content + ")RawMarker\";";
                   m_interpreter.process(clingInputIncludeContent, &output);
   
-                  clingInputBackup += "header"+ std::to_string(headerIndex) +"_content,";
+                  clingInputBackup += "XCnvrtc_header"+ std::to_string(headerIndex) +"_content,";
                   headerIndex++;
               }
               clingInputBackup += "};";
               m_interpreter.process(clingInputBackup, &output);
 
 
-            clingInput += ",\"xeus_cling.cu\","+ std::to_string(foundHeaders.size()) +",headers,header_names));";
+            clingInput += ",\"xeus_cling.cu\","+ std::to_string(foundHeaders.size()) +",XCnvrtc_headers,XCnvrtc_header_names));";
         } 
         
-
-
         m_interpreter.process(clingInput, &output);
         
-
-
-    
-
-        if(compilerOptions.size()==0) clingInput = "result =nvrtcCompileProgram(" + generateProgVarName + ",0,nullptr);";
+        if(compilerOptions.size()==0) clingInput = "XCnvrtc_result =nvrtcCompileProgram(" + generateProgVarName + ",0,nullptr);";
         else
         {
             std::string options = "const char* options[] = {\n";    
@@ -374,36 +337,36 @@ namespace xcpp
             options += "};";
             m_interpreter.process(options, &output);
 
-            clingInput = "result =nvrtcCompileProgram(" + generateProgVarName + "," + std::to_string(compilerOptions.size()) +",options);";
+            clingInput = "XCnvrtc_result =nvrtcCompileProgram(" + generateProgVarName + "," + std::to_string(compilerOptions.size()) +",options);";
         }  
     
         m_interpreter.process(clingInput, &output);
 
 
         clingInput = R"RawMarker( 
-            if (result != NVRTC_SUCCESS) {
-                std::cerr << nvrtcGetErrorString(result) << std::endl;
-                size_t log_size;
-                nvrtcGetProgramLogSize()RawMarker" + generateProgVarName + R"RawMarker(, &log_size);
-                char* log = new char[log_size];
-                nvrtcGetProgramLog()RawMarker" + generateProgVarName + R"RawMarker(, log);
-                std::cerr  << log << std::endl; 
-                delete[] log;
+            if (XCnvrtc_result != NVRTC_SUCCESS) {
+                std::cerr << nvrtcGetErrorString(XCnvrtc_result) << std::endl;
+                size_t XCnvrtc_log_size;
+                nvrtcGetProgramLogSize()RawMarker" + generateProgVarName + R"RawMarker(, &XCnvrtc_log_size);
+                char* XCnvrtc_log = new char[XCnvrtc_log_size];
+                nvrtcGetProgramLog()RawMarker" + generateProgVarName + R"RawMarker(, XCnvrtc_log);
+                std::cerr  << XCnvrtc_log << std::endl; 
+                delete[] XCnvrtc_log;
                 return -1;
             }
         )RawMarker";
         m_interpreter.process(clingInput, &output);
 
-        clingInput = "checkCudaError(nvrtcGetPTXSize(" + generateProgVarName + ",&ptxSize" + std::to_string(index) + "));";
+        clingInput = "checkCudaError(nvrtcGetPTXSize(" + generateProgVarName + ",&XCnvrtc_ptxSize" + std::to_string(index) + "));";
         m_interpreter.process(clingInput, &output);
         
-        m_interpreter.declare("char* ptx" + std::to_string(index) + " = new char[ptxSize" + std::to_string(index) + "];");
+        m_interpreter.declare("char* XCnvrtc_ptx" + std::to_string(index) + " = new char[XCnvrtc_ptxSize" + std::to_string(index) + "];");
 
-        clingInput = "checkCudaError(nvrtcGetPTX(" + generateProgVarName + ",ptx" + std::to_string(index) + "));";
+        clingInput = "checkCudaError(nvrtcGetPTX(" + generateProgVarName + ",XCnvrtc_ptx" + std::to_string(index) + "));";
         m_interpreter.process(clingInput, &output);
 
         //TEST
-        clingInput = "std::string ptxString(ptx" + std::to_string(index) + ", ptxSize"+ std::to_string(index) + ");";
+        clingInput = "std::string ptxString(XCnvrtc_ptx" + std::to_string(index) + ", XCnvrtc_ptxSize"+ std::to_string(index) + ");";
         m_interpreter.process(clingInput, &output);
         nl::json pub_data = mime_repr(output);
 
@@ -422,7 +385,7 @@ namespace xcpp
 
         for (int i = 0; i < foundCUDADevices; i++)
         {
-            clingInput = "cuModuleLoadData(&cuModule" + std::to_string(i) + ", ptx" + std::to_string(index) + ");";
+            clingInput = "cuModuleLoadData(&XCnvrtc_cuModule" + std::to_string(i) + ", XCnvrtc_ptx" + std::to_string(index) + ");";
             m_interpreter.process(clingInput, &output);
         }
 
@@ -467,12 +430,12 @@ namespace xcpp
             {
                 if(foundCUDADevices==1)
                 {
-                    clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ demangle(s) + R"RawMarker(, cuModule0, ")RawMarker"+ s +"\"));";
+                    clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ demangle(s) + R"RawMarker(, XCnvrtc_cuModule0, ")RawMarker"+ s +"\"));";
                     m_interpreter.process(clingInput, &output);
                 }
                 else
                 {
-                    clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ demangle(s) +"_GPU"+ std::to_string(i) + R"RawMarker(, cuModule)RawMarker" + std::to_string(i)+ R"RawMarker(, ")RawMarker"+ s + "\"));";
+                    clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ demangle(s) +"_GPU"+ std::to_string(i) + R"RawMarker(, XCnvrtc_cuModule)RawMarker" + std::to_string(i)+ R"RawMarker(, ")RawMarker"+ s + "\"));";
                     m_interpreter.process(clingInput, &output);
                 } 
             } 
@@ -502,25 +465,23 @@ namespace xcpp
         cling::Value output;
         if(foundCUDADevices>1)
         {
-            for (int i = 0; i < foundCUDADevices; i++)
-            {
-                clingInput = 
+            clingInput = 
                 R"RawMarker(
-                    for (int i = 0; i < CUDAdeviceCount; i++) {
+                    for (int i = 0; i < XCnvrtc_CUDAdeviceCount; i++) {
 
-                        cuDeviceGet(&deviceInfo, i);
+                        cuDeviceGet(&XCnvrtc_deviceInfo, i);
                 
-                        char gpuName[256];
-                        cuDeviceGetName(gpuName, 256, deviceInfo);
+                        char XCnvrtc_gpuName[256];
+                        cuDeviceGetName(XCnvrtc_gpuName, 256, XCnvrtc_deviceInfo);
         
-                        std::cout << "GPU: " << gpuName << "    CUdevice VarName: device"<< i << std::endl;
+                        std::cout << "GPU: " << XCnvrtc_gpuName << "    CUdevice VarName: XCnvrtc_device"<< i << std::endl;
                     } 
                 )RawMarker";
-                if(m_interpreter.process(clingInput, &output)!=cling::Interpreter::CompilationResult::kSuccess)
-                {
-                    return ERROR_CODE;
-                } 
-            }
+            if(m_interpreter.process(clingInput, &output)!=cling::Interpreter::CompilationResult::kSuccess)
+            {
+                return ERROR_CODE;
+            } 
+            
         } 
         return SUCCESS;  
     } 
