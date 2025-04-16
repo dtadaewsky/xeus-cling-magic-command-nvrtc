@@ -329,7 +329,7 @@ namespace xcpp
         if(compilerOptions.size()==0) clingInput = "XCnvrtc_result =nvrtcCompileProgram(" + generateProgVarName + ",0,nullptr);";
         else
         {
-            std::string options = "const char* options[] = {\n";    
+            std::string options = "const char* XCnvrtc_options[] = {\n";    
 
             for (const std::string& sopt : compilerOptions) {
                 options += "\"" + sopt + "\",";
@@ -337,7 +337,7 @@ namespace xcpp
             options += "};";
             m_interpreter.process(options, &output);
 
-            clingInput = "XCnvrtc_result =nvrtcCompileProgram(" + generateProgVarName + "," + std::to_string(compilerOptions.size()) +",options);";
+            clingInput = "XCnvrtc_result =nvrtcCompileProgram(" + generateProgVarName + "," + std::to_string(compilerOptions.size()) +",XCnvrtc_options);";
         }  
     
         m_interpreter.process(clingInput, &output);
