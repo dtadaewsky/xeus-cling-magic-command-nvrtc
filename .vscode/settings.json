@@ -81,6 +81,7 @@
         "__hash_table": "cpp",
         "__split_buffer": "cpp",
         "__tree": "cpp",
-        "__string": "cpp"
+        "__string": "cpp",
+        "csignal": "cpp"
     }
 }

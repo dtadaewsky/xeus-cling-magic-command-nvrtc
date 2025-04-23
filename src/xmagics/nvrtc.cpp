@@ -385,6 +385,8 @@ namespace xcpp
 
         for (int i = 0; i < foundCUDADevices; i++)
         {
+            clingInput = "cuCtxSetCurrent(XCnvrtc_cuContext"+ std::to_string(i) + ");";
+            m_interpreter.process(clingInput, &output);
             clingInput = "cuModuleLoadData(&XCnvrtc_cuModule" + std::to_string(i) + ", XCnvrtc_ptx" + std::to_string(index) + ");";
             m_interpreter.process(clingInput, &output);
         }
@@ -435,10 +437,14 @@ namespace xcpp
                 }
                 else
                 {
+                    clingInput = "cuCtxSetCurrent(XCnvrtc_cuContext"+ std::to_string(i) + ");";
+                    m_interpreter.process(clingInput, &output);
                     clingInput = R"RawMarker(checkCudaError(cuModuleGetFunction(&)RawMarker"+ demangle(s) +"_GPU"+ std::to_string(i) + R"RawMarker(, XCnvrtc_cuModule)RawMarker" + std::to_string(i)+ R"RawMarker(, ")RawMarker"+ s + "\"));";
                     m_interpreter.process(clingInput, &output);
                 } 
             } 
+            clingInput = "cuCtxSetCurrent(XCnvrtc_cuContext0);";
+            m_interpreter.process(clingInput, &output);
         } 
 
         return SUCCESS;
