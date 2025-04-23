@@ -480,7 +480,7 @@ namespace xcpp
                         char XCnvrtc_gpuName[256];
                         cuDeviceGetName(XCnvrtc_gpuName, 256, XCnvrtc_deviceInfo);
         
-                        std::cout << "GPU: " << XCnvrtc_gpuName << "    CUdevice VarName: XCnvrtc_device"<< i << std::endl;
+                        std::cout << "GPU: " << XCnvrtc_gpuName << " CUdevice: XCnvrtc_device"<< i << "CUcontext: XCnvrtc_cuContext"<< i <<std::endl;
                     } 
                 )RawMarker";
             if(m_interpreter.process(clingInput, &output)!=cling::Interpreter::CompilationResult::kSuccess)
