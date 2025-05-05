@@ -20,7 +20,7 @@ namespace xcpp
 {
     void nvrtc::operator()(const std::string& line, const std::string& cell)
     {
-        generateNVRTC(line,cell);
+        generateNVRTC(line,"\n\n" + cell);  // get new lines, for error response in correct line
     }
 
     void nvrtc::generateNVRTC(const std::string& line, const std::string& cell)
