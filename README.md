@@ -134,9 +134,16 @@ Prior to version 0.14, `xeus-cling` was depending on `xeus` instead of `xeus-zmq
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) to know how to contribute and set up a development environment.
 
-## License
+## License and Attribution
 
-We use a shared copyright model that enables all contributors to maintain the
-copyright on their contributions.
+This project is based on [Xeus-Cling](https://github.com/jupyter-xeus/xeus-cling), which is licensed under the BSD 3-Clause License.
 
-This software is licensed under the BSD-3-Clause license. See the [LICENSE](LICENSE) file for details.
+This modified version includes additional functionality, specifically an extended magic command system.
+
+In accordance with the original license, all copyright and license notices from the original project are retained.  
+This derived work is also released under the BSD 3-Clause License.
+
+---
+
+**Original project:** [Xeus-Cling GitHub Repository](https://github.com/jupyter-xeus/xeus-cling)  
+**License:** BSD 3-Clause License
