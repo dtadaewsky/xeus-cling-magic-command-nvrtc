@@ -2,6 +2,19 @@
 
 This version of Xeus-Cling contains a Magic Command which translates the code content via NVRTC during execution. The kernel definition can then be executed directly with the CUDA Driver API in the notebook.
 
+## Example Code
+
+### Run Magic Command: 
+In this case, the system has two GPUs and the kernel definition is generated for both devices. Compiler options are also used with the key '-co'.
+![UseMagicCommand](https://github.com/user-attachments/assets/bf9b9775-0298-4252-8236-072ccfacf672)
+
+### Run kernel with two GPUs in use:
+![RunKernel](https://github.com/user-attachments/assets/68316e05-3f86-4b9f-8ca0-040958830dce)
+
+### Redefine Kernel: 
+Also used GPUInfo to get more information about the system:
+![RedefineAndGPUInfo](https://github.com/user-attachments/assets/ac4e41aa-6c19-451e-99d2-9a632e721fcf)
+
 
 ### Installation from source
 
@@ -31,6 +44,8 @@ mamba install jupyterlab -c conda-forge
 
 
 ## Dependencies
+
+ The installation of CUDA Driver and CUDA Toolkit is required to run the magic command nvrtc
 
 ``xeus-cling`` depends on
 
