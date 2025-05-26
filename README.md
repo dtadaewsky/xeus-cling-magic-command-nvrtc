@@ -1,3 +1,8 @@
+## Description
+
+This version of Xeus-Cling contains a Magic Command which translates the code content via NVRTC during execution. The kernel definition can then be executed directly with the CUDA Driver API in the notebook.
+
+
 ### Installation from source
 
 You will first need to create a new environment and install the dependencies:
