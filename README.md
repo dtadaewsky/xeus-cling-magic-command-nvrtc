@@ -1,3 +1,29 @@
+### Installation from source
+
+You will first need to create a new environment and install the dependencies:
+
+```bash
+mamba create -n xeus-cling -c conda-forge cmake xeus-zmq cling nlohmann_json=3.11.2 cppzmq xtl pugixml doctest cpp-argparse
+source activate xeus-cling
+```
+Please refer to [environment-host.yml](https://github.com/jupyter-xeus/xeus-cling/blob/main/environment-host.yml) for packages specific versions to install if applicable.
+
+You can then compile the sources. From the build directory, run:
+
+```bash
+cmake -D CMAKE_INSTALL_PREFIX=${CONDA_PREFIX} -D CMAKE_C_COMPILER=$CC -D CMAKE_CXX_COMPILER=$CXX -D CMAKE_INSTALL_LIBDIR=${CONDA_PREFIX}/lib ..
+make && make install
+```
+
+If you don't have a frontend already installed (classic Jupyter Notebook or JupyterLab for instance), install one:
+
+```bash
+mamba install jupyterlab -c conda-forge
+```
+
+
+
+
 
 ## Dependencies
 
