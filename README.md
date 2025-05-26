@@ -40,7 +40,7 @@ Prior to version 0.14, `xeus-cling` was depending on `xeus` instead of `xeus-zmq
 
 This project is based on [Xeus-Cling](https://github.com/jupyter-xeus/xeus-cling), which is licensed under the BSD 3-Clause License.
 
-This modified version includes additional functionality, specifically an extended magic command system.
+This modified version includes additional functionality, a special magic command that runs nvrtc compilation of the cell code.
 
 In accordance with the original license, all copyright and license notices from the original project are retained.  
 This derived work is also released under the BSD 3-Clause License.
