@@ -36,10 +36,6 @@ Prior to version 0.14, `xeus-cling` was depending on `xeus` instead of `xeus-zmq
 
 `xeus-cling` requires its dependencies to be built with the same compiler and same C runtime as the one used to build `cling`.
 
-## Contributing
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) to know how to contribute and set up a development environment.
-
 ## License and Attribution
 
 This project is based on [Xeus-Cling](https://github.com/jupyter-xeus/xeus-cling), which is licensed under the BSD 3-Clause License.
